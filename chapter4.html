@@ -251,7 +251,8 @@
       switch (gameState.player.state) {
         case 'lying':
           // 玩家躺在床上，按任意方向键开始起床
-          if (keys.ArrowLeft || keys.ArrowRight || keys.ArrowUp) {
+          if (keys.ArrowLeft || keys.ArrowRight || keys.ArrowUp ||
+            leftBtn.touched || rightBtn.touched || jumpBtn.touched) {
             gameState.player.state = 'getting_up';
             showMessage("你慢慢地站了起来...");
             wakeUpCount++; // 每次醒来都增加次数
