@@ -746,8 +746,11 @@
       ctx.restore();
     }
 
+
+
     function drawRoom() {
-      // 墙壁
+
+
       ctx.fillStyle = '#2c3e50';
       gameState.room.walls.forEach(wall => {
         ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
@@ -805,10 +808,18 @@
     }
 
     function drawWindow() {
-      const windowWidth = 150;
-      const windowHeight = 200;
-      const windowX = canvas.width - windowWidth - 200;
-      const windowY = 100;
+      // 动态计算窗口的宽度和高度（等比缩放）
+      const windowWidth = canvas.width * 0.15; // 窗口宽度占 canvas 宽度的 20%
+      const windowHeight = canvas.height * 0.3; // 窗口高度占 canvas 高度的 25%
+
+      // 动态计算窗口的坐标
+      const windowX = canvas.width - windowWidth - canvas.width * 0.2; // 距右边框10%的距离
+      const windowY = canvas.height * 0.1; // 距顶部10%的距离
+
+      // 在 canvas 上绘制窗口
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ccc"; // 示例填充颜色
+      ctx.fillRect(windowX, windowY, windowWidth, windowHeight);
 
       // 窗框
       ctx.fillStyle = '#4A4A4A';
