@@ -132,9 +132,32 @@
     let wakeUpCount = 0;
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const messageBox = document.getElementById('messageBox');
-    canvas.width = 800;
-    canvas.height = 600;
+
+    // 设置 canvas 尺寸以匹配容器大小
+    function resizeCanvas() {
+      const container = canvas.parentElement;
+      const containerWidth = container.clientWidth;
+      const containerHeight = container.clientHeight;
+
+      // 保持 16:9 的宽高比
+      const aspectRatio = 16 / 9;
+      let width = containerWidth;
+      let height = width / aspectRatio;
+
+      if (height > containerHeight) {
+        height = containerHeight;
+        width = height * aspectRatio;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+    }
+
+    // 初始调整大小
+    resizeCanvas();
+
+    // 监听窗口大小变化
+    window.addEventListener('resize', resizeCanvas);
 
     const gameState = {
       player: {
@@ -161,8 +184,8 @@
         direction: 1,
         speedX: 0,
         speedY: 0,
-        health: 1000,  // 增加BOSS血量
-        maxHealth: 1000, // 最大血量
+        health: 100,  // 增加BOSS血量
+        maxHealth: 100, // 最大血量
         active: false,
         isDefeated: false,
         attackCooldown: 0, // 攻击冷却
@@ -196,6 +219,16 @@
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
     };
 
+    // 初始化游戏
+    function initGame() {
+      resizeCanvas();
+      initializePlayerPosition();
+      gameLoop();
+    }
+
+    // DOM 加载完成后启动游戏
+    document.addEventListener('DOMContentLoaded', initGame);
+
     // 初始化玩家位置（躺在床上）
     function initializePlayerPosition() {
       gameState.player.x = gameState.room.bed.x + 10;
@@ -224,8 +257,14 @@
             wakeUpCount++; // 每次醒来都增加次数
 
             // 检查是否是第三次醒来
+
             if (wakeUpCount === 3) {
-              gameState.boss.active = true;
+              setTimeout(() => {
+                gameState.boss.active = true;
+                gameState.boss.health = 100; // 确保是满血
+                gameState.boss.maxHealth = 100;
+                // ... 其他代码
+              }, 2000);
               showMessage("你看到一个陌生的身影，是你自己…");
             }
           }
@@ -251,7 +290,7 @@
           break;
 
         case 'normal':
-          if (gameState.boss.active) {
+          if (gameState.boss && gameState.boss.active) {  // 修改这行
             // BOSS战斗逻辑
             handleBossBattle();
           }
@@ -293,7 +332,7 @@
               Math.pow(gameState.player.y - gameState.interactables.key.y, 2)
             );
 
-            if (keyDistance < 50 && keys.Space) {
+            if (keyDistance < 50 && keys.ArrowUp) {
               gameState.interactables.key.collected = true;
               gameState.player.hasKey = true;
               showMessage("你找到了一把钥匙！");
@@ -306,7 +345,7 @@
             Math.pow(gameState.player.y - gameState.room.door.y, 2)
           );
 
-          if (doorDistance < 80 && keys.Space) {
+          if (doorDistance < 80 && keys.ArrowUp) {
             if (gameState.player.hasKey) {
               showMessage("门开了，但是...");
 
@@ -327,75 +366,116 @@
 
 
     function handleBossBattle() {
+      if (!gameState.boss || !gameState.boss.active) return;
       if (gameState.boss.stunned) {
         return; // 如果处于眩晕状态，停止所有行动
       }
 
-      const BOSS_SPEED = 2;
-      const PHASE_THRESHOLD = 300; // 每损失300血量进入新阶段
-
-      // 根据血量确定当前阶段
-      const currentPhase = Math.floor((gameState.boss.maxHealth - gameState.boss.health) / PHASE_THRESHOLD) + 1;
-
-      // 根据不同阶段调整BOSS行为
-      switch (gameState.boss.state) {
-        case 'chase':
-          // 追击玩家
-          const distToPlayer = Math.sqrt(
-            Math.pow(gameState.player.x - gameState.boss.x, 2) +
-            Math.pow(gameState.player.y - gameState.boss.y, 2)
-          );
-
-          // 方向判定
-          if (gameState.player.x < gameState.boss.x) {
-            gameState.boss.direction = -1;
-          } else {
-            gameState.boss.direction = 1;
-          }
-
-          // 移动速度随阶段增加
-          gameState.boss.speedX = BOSS_SPEED * gameState.boss.direction * (1 + currentPhase * 0.2);
-          gameState.boss.x += gameState.boss.speedX;
-
-          // 在近距离时切换到攻击状态
-          if (distToPlayer < 150) {
-            gameState.boss.state = 'attack';
-            gameState.boss.attackCooldown = 60; // 设置攻击冷却
-          }
-          break;
-
-        case 'attack':
-          // 攻击状态
-          if (gameState.boss.attackCooldown > 0) {
-            gameState.boss.attackCooldown--;
-          } else {
-            // 执行攻击
-            performBossAttack(currentPhase);
-            gameState.boss.state = 'recover';
-          }
-          break;
-
-        case 'recover':
-          // 恢复状态，短暂停顿后返回追击
-          gameState.boss.speedX = 0;
-          if (!gameState.boss.invincible) {
-            gameState.boss.invincible = true;
-            setTimeout(() => {
-              gameState.boss.invincible = false;
-              gameState.boss.state = 'chase';
-            }, 1000);
-          }
-          break;
+      // 添加碰撞检测
+      if (checkCollision(gameState.player, gameState.boss)) {
+        // 判断是否是从上方攻击
+        if (gameState.player.speedY > 0 &&
+          gameState.player.y + gameState.player.height < gameState.boss.y + gameState.boss.height / 2) {
+          handleBossHit();
+          // 给玩家一个向上的反弹力
+          gameState.player.speedY = -10;
+        } else if (!gameState.boss.invincible) {
+          // 如果不是从上方攻击，玩家受伤
+          handlePlayerHit();
+        }
       }
 
-      // 处理碰撞
-      if (checkCollision(gameState.player, gameState.boss)) {
-        if (!gameState.boss.invincible) {
-          handleBossHit();
+      gameState.boss.y = canvas.height - 120;
+      // 添加左右走动的逻辑
+      if (Math.abs(gameState.player.x - gameState.boss.x) > 100) {
+        // 如果与玩家距离较远，向玩家移动
+        gameState.boss.direction = gameState.player.x > gameState.boss.x ? -1 : 1;
+        gameState.boss.x += gameState.boss.speed * gameState.boss.direction;
+      } else {
+        // 在近距离时随机移动
+        if (Math.random() < 0.02) { // 2%几率改变方向
+          gameState.boss.direction *= -1;
         }
-        handlePlayerHit();
+        gameState.boss.x += gameState.boss.speed * gameState.boss.direction;
+      }
+
+      // 确保不会走出屏幕
+      gameState.boss.x = Math.max(50, Math.min(canvas.width - 130, gameState.boss.x));
+    }
+
+    const BOSS_SPEED = 2;
+    const PHASE_THRESHOLD = 300; // 每损失300血量进入新阶段
+
+    // 根据血量确定当前阶段
+    const currentPhase = Math.floor((gameState.boss.maxHealth - gameState.boss.health) / PHASE_THRESHOLD) + 1;
+
+    // 根据不同阶段调整BOSS行为
+    switch (gameState.boss.state) {
+      case 'chase':
+        // 追击玩家
+        const distToPlayer = Math.sqrt(
+          Math.pow(gameState.player.x - gameState.boss.x, 2) +
+          Math.pow(gameState.player.y - gameState.boss.y, 2)
+        );
+
+        // 方向判定
+        if (gameState.player.x < gameState.boss.x) {
+          gameState.boss.direction = -1;
+        } else {
+          gameState.boss.direction = 1;
+        }
+
+        // 移动速度随阶段增加
+        gameState.boss.speedX = BOSS_SPEED * gameState.boss.direction * (1 + currentPhase * 0.2);
+        gameState.boss.x += gameState.boss.speedX;
+
+        // 在近距离时切换到攻击状态
+        if (distToPlayer < 150) {
+          gameState.boss.state = 'attack';
+          gameState.boss.attackCooldown = 60; // 设置攻击冷却
+        }
+        break;
+
+      case 'attack':
+        // 攻击状态
+        if (gameState.boss.attackCooldown > 0) {
+          gameState.boss.attackCooldown--;
+        } else {
+          // 执行攻击
+          performBossAttack(currentPhase);
+          gameState.boss.state = 'recover';
+        }
+        break;
+
+      case 'recover':
+        // 恢复状态，短暂停顿后返回追击
+        gameState.boss.speedX = 0;
+        if (!gameState.boss.invincible) {
+          gameState.boss.invincible = true;
+          setTimeout(() => {
+            gameState.boss.invincible = false;
+            gameState.boss.state = 'chase';
+          }, 1000);
+        }
+        break;
+    }
+
+    // 处理碰撞
+    if (checkCollision(gameState.player, gameState.boss)) {
+      if (!gameState.boss.invincible) {
+        // 只有当玩家从上方碰撞且正在下落时才能伤害Boss
+        if (gameState.player.speedY > 0 &&
+          gameState.player.y + gameState.player.height < gameState.boss.y + gameState.boss.height / 2) {
+          handleBossHit();
+          // 击中后给玩家一个向上的反弹力
+          gameState.player.speedY = -10;
+        } else {
+          // 如果是其他方向的碰撞，玩家受伤
+          handlePlayerHit();
+        }
       }
     }
+
 
     function performBossAttack(phase) {
       switch (phase) {
@@ -437,29 +517,42 @@
     function handleBossHit() {
       if (gameState.boss.invincible) return;
 
-      const damage = 10;  // 基础伤害
-      gameState.boss.health -= damage;
+      // 基础伤害值
+      const damage = 10;
+      gameState.boss.health = Math.max(0, gameState.boss.health - damage);
       gameState.boss.hitCount++;
 
-      // 每累积10次击中，boss进入短暂眩晕
-      if (gameState.boss.hitCount >= 10) {
-        gameState.boss.stunned = true;
-        gameState.boss.hitCount = 0;
+      // 添加被击中效果
+      gameState.boss.stunned = true;
 
-        setTimeout(() => {
-          gameState.boss.stunned = false;
-          gameState.boss.state = 'chase';
-        }, 2000);
-      }
+      // 添加视觉反馈
+      effects.hits.push({
+        x: gameState.boss.x + gameState.boss.width / 2,
+        y: gameState.boss.y,
+        size: 10,
+        color: '#FFD700',
+        life: 10,
+        alpha: 1
+      });
+
+      // 设置短暂无敌时间
+      gameState.boss.invincible = true;
+      setTimeout(() => {
+        gameState.boss.stunned = false;
+        gameState.boss.invincible = false;
+      }, 500);
 
       // 检查是否击败
       if (gameState.boss.health <= 0) {
+        gameState.boss.isDefeated = true;
         gameState.boss.active = false;
-        gameState.player.hasKey = true;
-        showMessage("经过艰苦的战斗，你终于战胜了另一个自己，获得了大钥匙！");
+        // 生成钥匙
+        gameState.interactables.key.x = gameState.boss.x;
+        gameState.interactables.key.y = gameState.boss.y;
+        gameState.interactables.key.collected = false;
+        showMessage("你击败了另一个自己，他掉落了一把钥匙！");
       }
     }
-
     function handlePlayerHit() {
       // 玩家受伤逻辑
       gameState.player.existence -= 500;
@@ -468,21 +561,55 @@
       const knockbackForce = 8;
       gameState.player.speedX = (gameState.boss.x > gameState.player.x) ?
         -knockbackForce : knockbackForce;
-      gameState.player.speedY = -6; // 略微向上弹起
+      // 只有在玩家不是从上方攻击时才向上弹
+      if (!(gameState.player.speedY > 0 &&
+        gameState.player.y + gameState.player.height < gameState.boss.y + gameState.boss.height / 2)) {
+        gameState.player.speedY = -6; // 略微向上弹起
+      }
     }
 
     function resetDream() {
-      // 原有的重置代码
+      // 如果已经打败BOSS并获得钥匙后开门，显示游戏胜利
+      if (gameState.player.hasKey && gameState.boss.health <= 0) {
+        gameState.gameActive = false;
+        // 创建胜利文字div
+        const victoryText = document.createElement('div');
+        victoryText.style.position = 'absolute';
+        victoryText.style.top = '50%';
+        victoryText.style.left = '50%';
+        victoryText.style.transform = 'translate(-50%, -50%)';
+        victoryText.style.color = '#fff';
+        victoryText.style.fontSize = '36px';
+        victoryText.style.fontWeight = 'bold';
+        victoryText.style.textAlign = 'center';
+        victoryText.style.backgroundColor = 'rgba(0, 0, 0, 0.7)';
+        victoryText.style.padding = '20px';
+        victoryText.style.borderRadius = '10px';
+        victoryText.innerHTML = '游戏结束，你终于醒来了！';
+        document.body.appendChild(victoryText);
+
+        // 5秒后移除胜利文字
+        setTimeout(() => {
+          document.body.removeChild(victoryText);
+        }, 5000);
+        return;
+      }
+
+      // 如果是第三次重置，激活Boss
+      if (wakeUpCount === 2) {  // 因为resetDream在开门后调用，所以这里用2
+        setTimeout(() => {
+          gameState.boss.active = true;
+          gameState.boss.health = 100; // 设置Boss初始血量为100
+          gameState.boss.x = canvas.width / 2;
+          gameState.boss.y = canvas.height - 60;
+          showMessage("你看到一个陌生的身影，是你自己…");
+        }, 2000);  // 延迟2秒后出现Boss
+      }
+
+      // 重置玩家
       gameState.player.hasKey = false;
       gameState.interactables.key.collected = false;
       initializePlayerPosition();
-
-      // 添加boss重置
-      gameState.boss.health = 100;
-      gameState.boss.active = false;
-      gameState.boss.isDefeated = false;
-      gameState.boss.x = 300; // 重置位置
-      gameState.boss.y = canvas.height - 60;
 
       showMessage("你又回到了床上，这是梦吗？");
       gameState.backgroundColor = 'rgba(0, 0, 0, 0.5)';
@@ -520,6 +647,7 @@
     }
 
     function draw() {
+      if (!ctx || !canvas) return;  // 添加这行保护代码
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // 设置背景颜色
@@ -530,7 +658,7 @@
       drawRoom();
 
       // 绘制BOSS（如果BOSS激活）
-      if (gameState.boss.active) {
+      if (gameState.boss && gameState.boss.active) {  // 修改这行
         drawBoss();
       }
 
@@ -544,6 +672,7 @@
     }
 
     function drawBoss() {
+      if (!gameState.boss.active || !gameState.boss) return;
       if (!gameState.boss.active) return;
 
       ctx.save();
@@ -561,6 +690,40 @@
       ctx.fillRect(gameState.boss.x, gameState.boss.y,
         gameState.boss.width, gameState.boss.height);
 
+      // 绘制更醒目的血条
+      const healthBarWidth = 150; // 固定血条宽度
+      const healthBarHeight = 20; // 增加血条高度
+      const healthBarX = gameState.boss.x + (gameState.boss.width - healthBarWidth) / 2;
+      const healthBarY = gameState.boss.y - 40;
+
+      // 血条外框
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+
+      // 血条背景
+      ctx.fillStyle = '#333';
+      ctx.fillRect(healthBarX, healthBarY, healthBarWidth, healthBarHeight);
+
+      // 当前血量
+      const currentHealthWidth = (gameState.boss.health / gameState.boss.maxHealth) * healthBarWidth;
+      const healthGradient = ctx.createLinearGradient(healthBarX, healthBarY, healthBarX + healthBarWidth, healthBarY);
+      healthGradient.addColorStop(0, '#ff0000');
+      healthGradient.addColorStop(1, '#ff6666');
+      ctx.fillStyle = healthGradient;
+      ctx.fillRect(healthBarX, healthBarY, currentHealthWidth, healthBarHeight);
+
+      // 显示具体血量数值
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${gameState.boss.health}/${gameState.boss.maxHealth}`,
+        healthBarX + healthBarWidth / 2,
+        healthBarY + healthBarHeight / 2 + 4);
+
+
+
+
       // 绘制眼睛
       ctx.fillStyle = gameState.boss.stunned ? '#333' : '#FFF';
       const eyeX = gameState.boss.direction > 0 ?
@@ -568,20 +731,7 @@
         gameState.boss.x + 5;
       ctx.fillRect(eyeX, gameState.boss.y + 20, 10, 10);
 
-      // 绘制血条
-      const healthBarWidth = gameState.boss.width;
-      const healthBarHeight = 8;
 
-      // 血条背景
-      ctx.fillStyle = '#000';
-      ctx.fillRect(gameState.boss.x, gameState.boss.y - 20,
-        healthBarWidth, healthBarHeight);
-
-      // 当前血量
-      ctx.fillStyle = '#ff0000';
-      const currentHealthWidth = (gameState.boss.health / gameState.boss.maxHealth) * healthBarWidth;
-      ctx.fillRect(gameState.boss.x, gameState.boss.y - 20,
-        currentHealthWidth, healthBarHeight);
 
       // 添加阶段标识
       const phase = Math.floor((gameState.boss.maxHealth - gameState.boss.health) / 300) + 1;
@@ -709,7 +859,7 @@
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.font = '12px Arial';
         ctx.textAlign = 'center';
-        ctx.fillText('按空格键拾取', key.x + key.width / 2, key.y - 10);
+        ctx.fillText('按上键拾取', key.x + key.width / 2, key.y - 10);
       }
     }
 
@@ -828,18 +978,138 @@
       }
     }
 
+    // 在全局添加特效状态
+    const effects = {
+      hits: [] // 存储所有击中特效
+    };
+
+    // 添加特效绘制函数
+    function drawEffects() {
+      // 绘制所有击中特效
+      effects.hits = effects.hits.filter(hit => {
+        // 特效动画
+        hit.life -= 1;
+        hit.size += 2;
+        hit.alpha -= 0.1;
+
+        if (hit.life > 0) {
+          ctx.save();
+          ctx.globalAlpha = hit.alpha;
+          ctx.fillStyle = hit.color;
+          ctx.beginPath();
+          ctx.arc(hit.x, hit.y, hit.size, 0, Math.PI * 2);
+          ctx.fill();
+
+          // 添加放射状的线条
+          ctx.strokeStyle = hit.color;
+          ctx.lineWidth = 2;
+          for (let i = 0; i < 8; i++) {
+            const angle = (Math.PI * 2 / 8) * i;
+            ctx.beginPath();
+            ctx.moveTo(hit.x, hit.y);
+            ctx.lineTo(
+              hit.x + Math.cos(angle) * hit.size * 1.5,
+              hit.y + Math.sin(angle) * hit.size * 1.5
+            );
+            ctx.stroke();
+          }
+
+          ctx.restore();
+          return true;
+        }
+        return false;
+      });
+    }
+
+    // 在handleBossHit函数中添加击中特效
+    function handleBossHit() {
+      if (gameState.boss.invincible) return;
+
+      // 基础伤害值
+      const damage = 10;
+      gameState.boss.health = Math.max(0, gameState.boss.health - damage);
+      gameState.boss.hitCount++;
+
+      // 添加被击中效果
+      gameState.boss.stunned = true;
+
+      // 添加视觉反馈
+      effects.hits.push({
+        x: gameState.boss.x + gameState.boss.width / 2,
+        y: gameState.boss.y,
+        size: 10,
+        color: '#FFD700',
+        life: 10,
+        alpha: 1
+      });
+
+      // 设置短暂无敌时间
+      gameState.boss.invincible = true;
+      setTimeout(() => {
+        gameState.boss.stunned = false;
+        gameState.boss.invincible = false;
+      }, 500);
+
+      // 检查是否击败，修改这部分
+      if (gameState.boss.health <= 0) {
+        // 确保 Boss 状态正确设置
+        gameState.boss.health = 0;  // 确保血量为0
+        gameState.boss.isDefeated = true;
+        gameState.boss.active = false;
+        gameState.boss.stunned = true;  // 保持眩晕状态
+
+        // 生成钥匙
+        gameState.interactables.key.x = gameState.boss.x + gameState.boss.width / 2;
+        gameState.interactables.key.y = gameState.boss.y + gameState.boss.height - 30;
+        gameState.interactables.key.collected = false;
+
+        // 显示消息
+        showMessage("你击败了另一个自己，他掉落了一把钥匙！");
+
+        // 可选：添加击败特效
+        for (let i = 0; i < 8; i++) {
+          effects.hits.push({
+            x: gameState.boss.x + Math.random() * gameState.boss.width,
+            y: gameState.boss.y + Math.random() * gameState.boss.height,
+            size: 15,
+            color: '#FFD700',
+            life: 15,
+            alpha: 1
+          });
+        }
+      }
+    }
+
+
+
+    //修改主循环中的碰撞检测，使打击感更强：
+
+    if (checkCollision(gameState.player, gameState.boss)) {
+      if (!gameState.boss.invincible &&
+        gameState.player.speedY > 0 &&
+        gameState.player.y + gameState.player.height < gameState.boss.y + gameState.boss.height / 2) {
+        handleBossHit();
+        // 加强击退效果
+        gameState.player.speedY = -12;
+        // 短暂停顿效果
+        gameState.boss.stunned = true;
+        setTimeout(() => {
+          gameState.boss.stunned = false;
+        }, 200);
+      } else {
+        handlePlayerHit();
+      }
+    }
+
     function gameLoop() {
-      // 检查玩家和BOSS的碰撞
-      checkCollision(player, boss);
-
-      // 检查BOSS是否被打败
-      handleBossDefeat(boss);
-
-      // 检查门是否可以解锁
-      checkDoorUnlock(player, door, boss);
-
-      // 游戏逻辑更新（如玩家移动、界面刷新等）
-      updateGame();
+      // 使用正确的引用
+      if (gameState.gameActive) {
+        updatePlayer();
+        updateTimer();
+        updateExistenceDisplay();
+      }
+      draw();
+      requestAnimationFrame(gameLoop);
     }
 
     // 键盘控制
@@ -847,7 +1117,6 @@
       ArrowLeft: false,
       ArrowRight: false,
       ArrowUp: false,
-      Space: false
     };
 
     window.addEventListener('keydown', (e) => {
@@ -892,7 +1161,36 @@
     jumpBtn.addEventListener('touchstart', (e) => {
       e.preventDefault();
       gameState.keys.ArrowUp = true;
+
+      // 检查是否在钥匙附近
+      const keyDistance = Math.sqrt(
+        Math.pow(gameState.player.x - gameState.interactables.key.x, 2) +
+        Math.pow(gameState.player.y - gameState.interactables.key.y, 2)
+      );
+      if (keyDistance < 50 && !gameState.interactables.key.collected) {
+        gameState.interactables.key.collected = true;
+        gameState.player.hasKey = true;
+        showMessage("你找到了一把钥匙！");
+      }
+
+      // 检查是否在门附近
+      const doorDistance = Math.sqrt(
+        Math.pow(gameState.player.x - gameState.room.door.x, 2) +
+        Math.pow(gameState.player.y - gameState.room.door.y, 2)
+      );
+      if (doorDistance < 80) {
+        if (gameState.player.hasKey) {
+          showMessage("门开了，但是...");
+          setTimeout(() => {
+            resetDream();
+          }, 1000);
+        } else {
+          showMessage("门似乎锁住了...");
+        }
+      }
     });
+
+
 
     jumpBtn.addEventListener('touchend', (e) => {
       e.preventDefault();
