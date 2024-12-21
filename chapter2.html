@@ -3,8 +3,38 @@
 
 <head>
   <meta charset="UTF-8">
+  <!-- 在<head>标签中添加 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>存在感游戏 - 第二章：价值存在感</title>
   <style>
+    .control-btn {
+      position: fixed;
+      width: 60px;
+      height: 60px;
+      background: rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    #leftBtn {
+      bottom: 20px;
+      left: 20px;
+    }
+
+    #rightBtn {
+      bottom: 20px;
+      left: 100px;
+    }
+
+    #jumpBtn {
+      bottom: 20px;
+      right: 20px;
+    }
+
     body {
       margin: 0;
       overflow: hidden;
@@ -18,6 +48,12 @@
     #gameCanvas {
       border: 2px solid #fff;
       background: linear-gradient(to bottom, #87CEEB 0%, #4682B4 100%);
+      width: 100vw;
+      /* 让画布宽度填满屏幕 */
+      height: 56.25vw;
+      /* 保持16:9的宽高比 */
+      max-height: 100vh;
+      max-width: 177.78vh;
     }
 
     #existenceBar {
@@ -87,6 +123,9 @@
   </div>
   <div id="timer">30秒</div>
   <div id="gameResult"></div>
+  <div id="leftBtn" class="control-btn">←</div>
+  <div id="rightBtn" class="control-btn">→</div>
+  <div id="jumpBtn" class="control-btn">↑</div>
   <canvas id="gameCanvas"></canvas>
 
   <script>
@@ -158,6 +197,44 @@
       if (gameState.keys.hasOwnProperty(e.code)) {
         gameState.keys[e.code] = false;
       }
+    });
+
+    // 在window.addEventListener之后添加以下代码
+    const leftBtn = document.getElementById('leftBtn');
+    const rightBtn = document.getElementById('rightBtn');
+    const jumpBtn = document.getElementById('jumpBtn');
+
+    // 左按钮
+    leftBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      gameState.keys.ArrowLeft = true;
+    });
+
+    leftBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      gameState.keys.ArrowLeft = false;
+    });
+
+    // 右按钮
+    rightBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      gameState.keys.ArrowRight = true;
+    });
+
+    rightBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      gameState.keys.ArrowRight = false;
+    });
+
+    // 跳跃按钮
+    jumpBtn.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      gameState.keys.ArrowUp = true;
+    });
+
+    jumpBtn.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      gameState.keys.ArrowUp = false;
     });
 
     function spawnTrophy() {
@@ -320,7 +397,7 @@
           gameResultElement.textContent = "成功了！你证明了自己的价值！\n3秒后进入下一关...";
           gameResultElement.style.color = '#4CAF50';
           setTimeout(() => {
-            window.location.href = 'pages/chapter3.html';  // 跳转到第三关
+            window.location.href = 'chapter3.html';  // 跳转到第三关
           }, 3000);
         } else {
           gameResultElement.textContent = "失败了...你没能证明自己的价值";
